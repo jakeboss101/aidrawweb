@@ -235,10 +235,10 @@
 
     <div id="controls">
       <button id="btn-train" class="primary">
-        <span class="btn-dot"></span> Train AI
+        <span class="btn-dot"></span> AI Draw
       </button>
       <button id="btn-clear" class="secondary">Clear</button>
-      <button id="btn-save" class="secondary">Save Image</button>
+      <!-- Save Image button removed -->
       <button id="btn-download-model" class="secondary">Download Model</button>
       <button id="btn-save-rawdata" class="secondary">Save Rawdata</button>
       <div id="status"></div>
@@ -285,8 +285,15 @@
     }
 
     function clearCanvas() {
+      // Top (original drawing) = white
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, origHeight);
+
+      // Bottom (AI prediction) = dark
       ctx.fillStyle = "#020617";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, origHeight, canvas.width, canvas.height - origHeight);
+
+      // Divider line
       ctx.strokeStyle = "#111827";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -332,7 +339,7 @@
     function redraw(showAI = false) {
       clearCanvas();
       if (originalPoints.length > 1) {
-        drawStroke(originalPoints, normToScreenOriginal, "#e5e7eb");
+        drawStroke(originalPoints, normToScreenOriginal, "#000000");
       }
       if (showAI && aiPoints && aiPoints.length > 1) {
         drawStroke(aiPoints, normToScreenAI, "#60a5fa");
@@ -564,17 +571,9 @@
       setStatus("Cleared.");
     };
 
-    document.getElementById("btn-save").onclick = () => {
-      const link = document.createElement("a");
-      link.download = "aidraw_web.png";
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-      setStatus("Image downloaded.");
-    };
-
     document.getElementById("btn-download-model").onclick = async () => {
       if (!model) {
-        setStatus("No model yet. Train AI first.");
+        setStatus("No model yet. Use AI Draw first.");
         return;
       }
       try {
