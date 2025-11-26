@@ -31,7 +31,7 @@
 
     .app {
       width: 100%;
-      max-width: 432px; /* 90% of 480 */
+      max-width: 384px; /* smaller app width */
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -83,7 +83,7 @@
       display: block;
       width: 100%;
       height: auto;
-      max-height: 65vh;
+      max-height: 60vh; /* slightly shorter */
       touch-action: none;
       background: radial-gradient(circle at top, #020617 0, #000 55%);
     }
@@ -210,7 +210,7 @@
 
     @media (min-width: 768px) {
       .app {
-        max-width: 540px; /* 90% of 600 */
+        max-width: 480px; /* smaller desktop width */
         padding-top: 18px;
       }
     }
@@ -234,10 +234,9 @@
     </div>
 
     <div id="controls">
-      <!-- AI Draw button removed -->
       <button id="btn-clear" class="secondary">Clear</button>
-      <button id="btn-download-model" class="secondary">Download Model</button>
-      <button id="btn-save-rawdata" class="secondary">Save Rawdata</button>
+      <button id="btn-view-model" class="secondary">View Model</button>
+      <button id="btn-view-rawdata" class="secondary">View Rawdata</button>
       <div id="status"></div>
     </div>
 
@@ -283,11 +282,9 @@
     }
 
     function clearCanvas() {
-      // Whole canvas dark again
       ctx.fillStyle = "#020617";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Divider line
       ctx.strokeStyle = "#111827";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -333,7 +330,6 @@
     function redraw(showAI = false) {
       clearCanvas();
       if (originalPoints.length > 1) {
-        // back to light stroke on dark bg
         drawStroke(originalPoints, normToScreenOriginal, "#e5e7eb");
       }
       if (showAI && aiPoints && aiPoints.length > 1) {
@@ -373,7 +369,6 @@
       }
 
       setStatus((msg ? msg + " " : "") + "Training AI...");
-      // Auto-start training after stroke is done
       trainModelOnStroke(originalPoints);
     }
 
@@ -542,10 +537,43 @@
       }
     }
 
-    // Rawdata saver
-    function saveRawdata() {
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    async function viewModel() {
+      if (!model) {
+        setStatus("No model yet. Draw first so the AI can train.");
+        return;
+      }
+      try {
+        const json = await model.toJSON();
+        const pretty = JSON.stringify(json, null, 2);
+        const win = window.open("", "_blank");
+        if (!win) {
+          alert("Please allow popups to view the model.");
+          return;
+        }
+        win.document.write(
+          "<!DOCTYPE html><html><head><title>aidraw model</title></head><body>" +
+          "<pre style='white-space:pre; font-family:monospace; font-size:12px;'>" +
+          escapeHtml(pretty) +
+          "</pre></body></html>"
+        );
+        win.document.close();
+        setStatus("Opened model JSON in a new tab.");
+      } catch (e) {
+        console.error(e);
+        setStatus("Failed to view model.");
+      }
+    }
+
+    function viewRawdata() {
       if (originalPoints.length < 5) {
-        setStatus("No stroke data to save.");
+        setStatus("No stroke data to view.");
         return;
       }
       const lines = [];
@@ -556,16 +584,21 @@
       }
       lines.push("    ],");
       lines.push("]");
-      const blob = new Blob([lines.join("\n")], { type: "text/x-python" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "rawdata.py";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setStatus("Saved rawdata.py");
+      const text = lines.join("\n");
+
+      const win = window.open("", "_blank");
+      if (!win) {
+        alert("Please allow popups to view the rawdata.");
+        return;
+      }
+      win.document.write(
+        "<!DOCTYPE html><html><head><title>aidraw rawdata</title></head><body>" +
+        "<pre style='white-space:pre; font-family:monospace; font-size:12px;'>" +
+        escapeHtml(text) +
+        "</pre></body></html>"
+      );
+      win.document.close();
+      setStatus("Opened rawdata in a new tab.");
     }
 
     // Buttons
@@ -585,22 +618,12 @@
       setStatus("Cleared.");
     };
 
-    document.getElementById("btn-download-model").onclick = async () => {
-      if (!model) {
-        setStatus("No model yet. Draw first so the AI can train.");
-        return;
-      }
-      try {
-        await model.save("downloads://aidraw_model");
-        setStatus("Model downloaded (aidraw_model.*).");
-      } catch (e) {
-        console.error(e);
-        setStatus("Failed to download model.");
-      }
+    document.getElementById("btn-view-model").onclick = () => {
+      viewModel();
     };
 
-    document.getElementById("btn-save-rawdata").onclick = () => {
-      saveRawdata();
+    document.getElementById("btn-view-rawdata").onclick = () => {
+      viewRawdata();
     };
   </script>
 </body>
