@@ -85,7 +85,7 @@
       height: auto;
       max-height: 65vh;
       touch-action: none;
-      background: #ffffff; /* top is white, but we redraw anyway */
+      background: radial-gradient(circle at top, #020617 0, #000 55%);
     }
 
     #labels {
@@ -238,7 +238,6 @@
         <span class="btn-dot"></span> AI Draw
       </button>
       <button id="btn-clear" class="secondary">Clear</button>
-      <!-- Save Image button removed -->
       <button id="btn-download-model" class="secondary">Download Model</button>
       <button id="btn-save-rawdata" class="secondary">Save Rawdata</button>
       <div id="status"></div>
@@ -286,13 +285,9 @@
     }
 
     function clearCanvas() {
-      // Top (original drawing) = white
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, origHeight);
-
-      // Bottom (AI prediction) = dark
+      // Whole canvas dark again
       ctx.fillStyle = "#020617";
-      ctx.fillRect(0, origHeight, canvas.width, canvas.height - origHeight);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Divider line
       ctx.strokeStyle = "#111827";
@@ -340,7 +335,8 @@
     function redraw(showAI = false) {
       clearCanvas();
       if (originalPoints.length > 1) {
-        drawStroke(originalPoints, normToScreenOriginal, "#000000");
+        // back to light stroke on dark bg
+        drawStroke(originalPoints, normToScreenOriginal, "#e5e7eb");
       }
       if (showAI && aiPoints && aiPoints.length > 1) {
         drawStroke(aiPoints, normToScreenAI, "#60a5fa");
