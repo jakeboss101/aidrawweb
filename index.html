@@ -1,71 +1,272 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>aidraw – browser AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; background: #fafafa; }
+    :root {
+      --bg: #050816;
+      --panel: #101827;
+      --accent: #4f46e5;
+      --accent-soft: #4caf50;
+      --border: #1f2937;
+      --text: #f9fafb;
+      --muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: radial-gradient(circle at top, #1e293b 0, #020617 45%);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 480px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      gap: 10px;
+    }
+
+    header {
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #111827, #020617);
+      border: 1px solid var(--border);
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.8);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    header h1 span.logo-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 30%, #38bdf8, #6366f1);
+      box-shadow: 0 0 12px rgba(129, 140, 248, 0.8);
+    }
+
+    header p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    #canvas-wrapper {
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #020617;
+      box-shadow: 0 16px 35px rgba(15, 23, 42, 0.9);
+    }
+
     #canvas {
       display: block;
-      border-bottom: 1px solid #ccc;
-      background: #fff;
-      touch-action: none; /* prevent page scroll / zoom on touch */
-    }
-    #controls { padding: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    button { padding: 6px 10px; cursor: pointer; }
-    #status { margin-left: 12px; font-size: 14px; min-width: 200px; }
-    #progress-wrapper {
       width: 100%;
-      padding: 0 8px 8px 8px;
-      box-sizing: border-box;
+      height: auto;
+      touch-action: none; /* stop scroll while drawing */
+      background: radial-gradient(circle at top, #020617 0, #000 55%);
     }
-    #epoch-label { font-size: 13px; margin-bottom: 4px; display: block; }
+
+    #labels {
+      display: flex;
+      font-size: 11px;
+      color: var(--muted);
+      border-top: 1px solid #111827;
+      background: #030712;
+    }
+
+    #labels div {
+      flex: 1;
+      text-align: center;
+      padding: 4px 0 6px;
+    }
+
+    #labels span.dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      margin-right: 4px;
+    }
+
+    #labels .orig span.dot {
+      background: #f9fafb;
+    }
+
+    #labels .ai span.dot {
+      background: #60a5fa;
+    }
+
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px 2px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button {
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.6);
+      transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.1s;
+    }
+
+    button span.btn-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #4ade80;
+    }
+
+    button.primary {
+      background: linear-gradient(135deg, #4f46e5, #22d3ee);
+      border-color: transparent;
+    }
+
+    button.secondary {
+      background: #020617;
+    }
+
+    button:active {
+      transform: scale(0.97) translateY(1px);
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.4);
+    }
+
+    #status {
+      flex: 1 1 100%;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    #progress-wrapper {
+      padding: 0 4px 4px;
+    }
+
+    #epoch-label {
+      font-size: 11px;
+      margin-bottom: 4px;
+      color: var(--muted);
+      text-align: center;
+      min-height: 14px;
+    }
+
     #progress-container {
       width: 100%;
-      max-width: 400px;
-      height: 10px;
-      background: #e0e0e0;
-      border-radius: 5px;
+      height: 8px;
+      background: #020617;
+      border-radius: 999px;
       overflow: hidden;
+      border: 1px solid #111827;
     }
+
     #progress-bar {
       height: 100%;
       width: 0%;
-      background: #4caf50; /* green car */
+      background: linear-gradient(90deg, #22c55e, #a3e635);
       transition: width 0.1s linear;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    }
+
+    footer {
+      margin-top: auto;
+      text-align: center;
+      font-size: 10px;
+      color: #4b5563;
+      padding-top: 4px;
+    }
+
+    @media (min-width: 768px) {
+      .app {
+        max-width: 600px;
+        padding-top: 18px;
+      }
     }
   </style>
+
   <!-- Real neural net in the browser -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 </head>
 <body>
-  <canvas id="canvas" width="800" height="400"></canvas>
+  <div class="app">
+    <header>
+      <h1><span class="logo-dot"></span>aidraw <span style="font-size:11px; opacity:0.7;">web</span></h1>
+      <p>Draw on top, watch the tiny neural net learn to copy you on the bottom.</p>
+    </header>
 
-  <div id="controls">
-    <button id="btn-train">Train AI</button>
-    <button id="btn-draw-ai">Draw with AI</button>
-    <button id="btn-clear">Clear</button>
-    <button id="btn-save">Save Image</button>
-    <span id="status"></span>
-  </div>
-
-  <div id="progress-wrapper">
-    <span id="epoch-label"></span>
-    <div id="progress-container">
-      <div id="progress-bar"></div>
+    <div id="canvas-wrapper">
+      <!-- portrait-friendly: ORIGINAL on top half, AI on bottom half -->
+      <canvas id="canvas" width="360" height="600"></canvas>
+      <div id="labels">
+        <div class="orig"><span class="dot"></span>Original</div>
+        <div class="ai"><span class="dot"></span>AI prediction</div>
+      </div>
     </div>
+
+    <div id="controls">
+      <button id="btn-train" class="primary">
+        <span class="btn-dot"></span> Train AI
+      </button>
+      <button id="btn-draw-ai" class="secondary">Draw with AI</button>
+      <button id="btn-clear" class="secondary">Clear</button>
+      <button id="btn-save" class="secondary">Save Image</button>
+      <button id="btn-download-model" class="secondary">Download Model</button>
+      <button id="btn-save-rawdata" class="secondary">Save Rawdata</button>
+      <div id="status"></div>
+    </div>
+
+    <div id="progress-wrapper">
+      <div id="epoch-label"></div>
+      <div id="progress-container">
+        <div id="progress-bar"></div>
+      </div>
+    </div>
+
+    <footer>Best viewed in portrait · model resets when you reload</footer>
   </div>
 
   <script>
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
-    const leftWidth = canvas.width / 2;
-
     const epochLabel = document.getElementById("epoch-label");
     const progressBar = document.getElementById("progress-bar");
 
     const TOTAL_EPOCHS = 2500;
+    const PREVIEW_EVERY = 100;
+
+    const origHeight = canvas.height / 2; // top half = original, bottom half = AI
 
     let drawing = false;
     let originalPoints = [];   // [[x,y] in 0–1]
@@ -82,30 +283,44 @@
     function updateProgress(epoch, loss) {
       const pct = ((epoch + 1) / TOTAL_EPOCHS) * 100;
       progressBar.style.width = pct + "%";
-      epochLabel.textContent = `Training epoch ${epoch + 1}/${TOTAL_EPOCHS}` +
-        (loss != null ? `   loss: ${loss.toFixed(4)}` : "");
+      epochLabel.textContent =
+        `Training epoch ${epoch + 1}/${TOTAL_EPOCHS}` +
+        (loss != null ? ` · loss: ${loss.toFixed(4)}` : "");
     }
 
     function clearCanvas() {
-      ctx.fillStyle = "#ffffff";
+      // background
+      ctx.fillStyle = "#020617";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = "#e0e0e0";
-      ctx.strokeRect(0, 0, leftWidth, canvas.height);
-      ctx.strokeRect(leftWidth, 0, leftWidth, canvas.height);
+
+      // soft separation line between original and AI
+      ctx.strokeStyle = "#111827";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, origHeight + 0.5);
+      ctx.lineTo(canvas.width, origHeight + 0.5);
+      ctx.stroke();
     }
 
-    function screenToNorm(x, y) {
-      const nx = Math.max(0, Math.min(x, leftWidth - 1)) / leftWidth;
-      const ny = 1 - (Math.max(0, Math.min(y, canvas.height - 1)) / canvas.height);
+    function screenToNormOriginal(x, y) {
+      // clamp into top half
+      const cx = Math.max(0, Math.min(x, canvas.width - 1));
+      const cy = Math.max(0, Math.min(y, origHeight - 1));
+      const nx = cx / canvas.width;
+      const ny = 1 - (cy / origHeight);
       return [nx, ny];
     }
 
-    function normToScreenLeft(x, y) {
-      return [x * leftWidth, (1 - y) * canvas.height];
+    function normToScreenOriginal(x, y) {
+      const sx = x * canvas.width;
+      const sy = (1 - y) * origHeight;
+      return [sx, sy];
     }
 
-    function normToScreenRight(x, y) {
-      return [leftWidth + x * leftWidth, (1 - y) * canvas.height];
+    function normToScreenAI(x, y) {
+      const sx = x * canvas.width;
+      const sy = (1 - y) * origHeight + origHeight;
+      return [sx, sy];
     }
 
     function drawStroke(points, toScreenFn, color) {
@@ -125,13 +340,14 @@
     function redraw(showAI = false) {
       clearCanvas();
       if (originalPoints.length > 1) {
-        drawStroke(originalPoints, normToScreenLeft, "#000000");
+        drawStroke(originalPoints, normToScreenOriginal, "#e5e7eb");
       }
       if (showAI && aiPoints && aiPoints.length > 1) {
-        drawStroke(aiPoints, normToScreenRight, "#0000ff");
+        drawStroke(aiPoints, normToScreenAI, "#60a5fa");
       }
     }
 
+    // initial paint
     clearCanvas();
 
     function getCanvasPosFromMouse(e) {
@@ -151,16 +367,16 @@
       };
     }
 
-    // ── Mouse drawing (left half only) ─────────────────
+    // ── Mouse drawing (top half only) ─────────────────
     canvas.addEventListener("mousedown", (e) => {
       e.preventDefault();
       const { x, y } = getCanvasPosFromMouse(e);
-      if (y >= canvas.height || x >= leftWidth) return;
+      if (y >= origHeight) return; // only top half
       drawing = true;
       originalPoints = [];
       aiPoints = null;
       resetProgress();
-      const [nx, ny] = screenToNorm(x, y);
+      const [nx, ny] = screenToNormOriginal(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
       setStatus("Recording stroke...");
@@ -170,8 +386,8 @@
       if (!drawing) return;
       e.preventDefault();
       const { x, y } = getCanvasPosFromMouse(e);
-      if (y >= canvas.height || x >= leftWidth) return;
-      const [nx, ny] = screenToNorm(x, y);
+      if (y >= origHeight) return;
+      const [nx, ny] = screenToNormOriginal(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
     });
@@ -185,16 +401,16 @@
 
     canvas.addEventListener("mouseleave", () => { drawing = false; });
 
-    // ── Touch drawing (left half only, prevent scroll) ─
+    // ── Touch drawing (top half only) ─────────────────
     canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
       const { x, y } = getCanvasPosFromTouch(e);
-      if (y >= canvas.height || x >= leftWidth) return;
+      if (y >= origHeight) return;
       drawing = true;
       originalPoints = [];
       aiPoints = null;
       resetProgress();
-      const [nx, ny] = screenToNorm(x, y);
+      const [nx, ny] = screenToNormOriginal(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
       setStatus("Recording stroke...");
@@ -204,8 +420,8 @@
       if (!drawing) return;
       e.preventDefault();
       const { x, y } = getCanvasPosFromTouch(e);
-      if (y >= canvas.height || x >= leftWidth) return;
-      const [nx, ny] = screenToNorm(x, y);
+      if (y >= origHeight) return;
+      const [nx, ny] = screenToNormOriginal(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
     }, { passive: false });
@@ -232,30 +448,47 @@
 
     async function trainModelOnStroke(points) {
       const T = points.length;
-      const t = tf.linspace(0, 1, T).reshape([T, 1]);      // (T,1)
+      const tTrain = tf.linspace(0, 1, T).reshape([T, 1]); // (T,1)
       const y = tf.tensor2d(points);                        // (T,2)
 
       model = buildModel();
-      setStatus("Training AI (browser neural net)...");
+      setStatus("Training AI (on-device neural net)...");
       resetProgress();
+      aiPoints = null;
+      redraw(false);
 
-      await model.fit(t, y, {
+      await model.fit(tTrain, y, {
         epochs: TOTAL_EPOCHS,
         batchSize: 32,
         shuffle: true,
         callbacks: {
           onEpochEnd: (epoch, logs) => {
             updateProgress(epoch, logs.loss);
-            if ((epoch + 1) % 20 === 0 || epoch + 1 === TOTAL_EPOCHS) {
-              setStatus(`Training... epoch ${epoch + 1}/${TOTAL_EPOCHS}`);
+
+            if ((epoch + 1) % PREVIEW_EVERY === 0 || epoch + 1 === TOTAL_EPOCHS) {
+              tf.tidy(() => {
+                const tPred = tf.linspace(0, 1, T).reshape([T, 1]);
+                const pred = model.predict(tPred);
+                const data = pred.dataSync();
+                const pts = [];
+                for (let i = 0; i < T; i++) {
+                  let x = data[2 * i];
+                  let yv = data[2 * i + 1];
+                  x = Math.min(Math.max(x, 0), 1);
+                  yv = Math.min(Math.max(yv, 0), 1);
+                  pts.push([x, yv]);
+                }
+                aiPoints = pts;
+              });
+              redraw(true);
             }
           }
         }
       });
 
-      t.dispose();
+      tTrain.dispose();
       y.dispose();
-      setStatus("Training done. Click 'Draw with AI'.");
+      setStatus("Training done. AI stroke is shown on the bottom.");
     }
 
     async function generateAI(points) {
@@ -275,13 +508,39 @@
         Math.min(Math.max(y, 0), 1),
       ]);
       redraw(true);
-      setStatus("Original (left) vs AI (right, blue).");
+      setStatus("Original on top · AI copy on bottom.");
+    }
+
+    // ── Rawdata saver ──────────────────────────────────
+    function saveRawdata() {
+      if (originalPoints.length < 5) {
+        setStatus("No stroke data to save.");
+        return;
+      }
+      const lines = [];
+      lines.push("RUNS = [");
+      lines.push("    [  # one run");
+      for (const [x, y] of originalPoints) {
+        lines.push(`        [${x.toFixed(6)}, ${y.toFixed(6)}],`);
+      }
+      lines.push("    ],");
+      lines.push("]");
+      const blob = new Blob([lines.join("\n")], { type: "text/x-python" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "rawdata.py";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus("Saved rawdata.py");
     }
 
     // ── Buttons ────────────────────────────────────────
     document.getElementById("btn-train").onclick = async () => {
       if (originalPoints.length < 5) {
-        setStatus("Draw something on the left first.");
+        setStatus("Draw something on the top half first.");
         return;
       }
       await trainModelOnStroke(originalPoints);
@@ -309,6 +568,24 @@
       link.href = canvas.toDataURL("image/png");
       link.click();
       setStatus("Image downloaded.");
+    };
+
+    document.getElementById("btn-download-model").onclick = async () => {
+      if (!model) {
+        setStatus("No model yet. Train AI first.");
+        return;
+      }
+      try {
+        await model.save("downloads://aidraw_model");
+        setStatus("Model downloaded (aidraw_model.*).");
+      } catch (e) {
+        console.error(e);
+        setStatus("Failed to download model.");
+      }
+    };
+
+    document.getElementById("btn-save-rawdata").onclick = () => {
+      saveRawdata();
     };
   </script>
 </body>
