@@ -428,8 +428,8 @@
     // ── TF.js model: t -> (x,y) ────────────────────────
     function buildModel() {
       const m = tf.sequential();
-      m.add(tf.layers.dense({ units: 64, inputShape: [1], activation: "tanh" }));
-      m.add(tf.layers.dense({ units: 64, activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 32, inputShape: [1], activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 32, activation: "tanh" }));
       m.add(tf.layers.dense({ units: 2 }));
       m.compile({
         optimizer: tf.train.adam(0.01),
@@ -438,16 +438,26 @@
       return m;
     }
 
+    // Try to use WebGL backend if possible (can help on some devices)
+    (async () => {
+      try {
+        await tf.setBackend('webgl');
+      } catch (e) {
+        console.warn("Could not set WebGL backend:", e);
+      }
+      await tf.ready();
+    })();
+
     async function trainModelOnStroke(points) {
       const T = points.length;
       const totalEpochs = Math.max(10, T * 10);               // 10 epochs per point
-      const previewEvery = Math.max(1, Math.floor(totalEpochs / 25)); // ~25 previews
+      const previewEvery = 5;                                 // 🔹 update every 5 epochs
 
       const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);    // (T,1)
       const y = tf.tensor2d(points);                          // (T,2)
 
       model = buildModel();
-      setStatus(`Training AI · ${totalEpochs} epochs for ${T} points`);
+      // no "Training AI · ..." status line
       resetProgress();
       aiPoints = null;
       redraw(false);
