@@ -20,13 +20,21 @@
       -webkit-tap-highlight-color: transparent;
     }
 
+    html {
+      height: 100%;
+      background: radial-gradient(circle at top, #1e293b 0, #020617 45%);
+      overscroll-behavior: none; /* reduce rubber-band scrolling */
+    }
+
     body {
       margin: 0;
+      height: 100%;
+      overflow: hidden; /* no scroll, no white gap */
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-      background: radial-gradient(circle at top, #1e293b 0, #020617 45%);
       color: var(--text);
       display: flex;
       justify-content: center;
+      background: transparent;
     }
 
     .app {
@@ -228,7 +236,7 @@
 
     <div id="canvas-wrapper">
       <!-- portrait-friendly: ORIGINAL on top, AI on bottom -->
-      <canvas id="canvas" width="360" height="510"></canvas> <!-- 15% shorter -->
+      <canvas id="canvas" width="360" height="510"></canvas>
       <div id="labels">
         <div class="orig"><span class="dot"></span>Original</div>
         <div class="ai"><span class="dot"></span>AI prediction</div>
@@ -428,11 +436,11 @@
     // ── TF.js model: t -> (x,y) ────────────────────────
     function buildModel() {
       const m = tf.sequential();
-      m.add(tf.layers.dense({ units: 64, inputShape: [1], activation: "tanh" }));
-      m.add(tf.layers.dense({ units: 64, activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 128, inputShape: [1], activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 128, activation: "tanh" }));
       m.add(tf.layers.dense({ units: 2 }));
       m.compile({
-        optimizer: tf.train.adam(0.01),
+        optimizer: tf.train.adam(0.003), // smaller LR, closer fit
         loss: "meanSquaredError",
       });
       return m;
