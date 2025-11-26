@@ -83,7 +83,8 @@
       display: block;
       width: 100%;
       height: auto;
-      touch-action: none; /* stop scroll while drawing */
+      max-height: 65vh;          /* shrink on small phones */
+      touch-action: none;        /* stop scroll while drawing */
       background: radial-gradient(circle at top, #020617 0, #000 55%);
     }
 
@@ -226,8 +227,8 @@
     </header>
 
     <div id="canvas-wrapper">
-      <!-- portrait-friendly: ORIGINAL on top half, AI on bottom half -->
-      <canvas id="canvas" width="360" height="600"></canvas>
+      <!-- portrait-friendly: ORIGINAL on top, AI on bottom -->
+      <canvas id="canvas" width="360" height="510"></canvas> <!-- 15% shorter -->
       <div id="labels">
         <div class="orig"><span class="dot"></span>Original</div>
         <div class="ai"><span class="dot"></span>AI prediction</div>
@@ -238,7 +239,6 @@
       <button id="btn-train" class="primary">
         <span class="btn-dot"></span> Train AI
       </button>
-      <button id="btn-draw-ai" class="secondary">Draw with AI</button>
       <button id="btn-clear" class="secondary">Clear</button>
       <button id="btn-save" class="secondary">Save Image</button>
       <button id="btn-download-model" class="secondary">Download Model</button>
@@ -263,9 +263,6 @@
     const epochLabel = document.getElementById("epoch-label");
     const progressBar = document.getElementById("progress-bar");
 
-    const TOTAL_EPOCHS = 1000;
-    const PREVIEW_EVERY = 100;
-
     const origHeight = canvas.height / 2; // top half = original, bottom half = AI
 
     let drawing = false;
@@ -280,20 +277,17 @@
       progressBar.style.width = "0%";
     }
 
-    function updateProgress(epoch, loss) {
-      const pct = ((epoch + 1) / TOTAL_EPOCHS) * 100;
+    function updateProgress(epoch, loss, totalEpochs) {
+      const pct = ((epoch + 1) / totalEpochs) * 100;
       progressBar.style.width = pct + "%";
       epochLabel.textContent =
-        `Training epoch ${epoch + 1}/${TOTAL_EPOCHS}` +
+        `Training epoch ${epoch + 1}/${totalEpochs}` +
         (loss != null ? ` · loss: ${loss.toFixed(4)}` : "");
     }
 
     function clearCanvas() {
-      // background
       ctx.fillStyle = "#020617";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      // soft separation line between original and AI
       ctx.strokeStyle = "#111827";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -303,7 +297,6 @@
     }
 
     function screenToNormOriginal(x, y) {
-      // clamp into top half
       const cx = Math.max(0, Math.min(x, canvas.width - 1));
       const cy = Math.max(0, Math.min(y, origHeight - 1));
       const nx = cx / canvas.width;
@@ -347,7 +340,6 @@
       }
     }
 
-    // initial paint
     clearCanvas();
 
     function getCanvasPosFromMouse(e) {
@@ -371,7 +363,7 @@
     canvas.addEventListener("mousedown", (e) => {
       e.preventDefault();
       const { x, y } = getCanvasPosFromMouse(e);
-      if (y >= origHeight) return; // only top half
+      if (y >= origHeight) return;
       drawing = true;
       originalPoints = [];
       aiPoints = null;
@@ -448,24 +440,27 @@
 
     async function trainModelOnStroke(points) {
       const T = points.length;
-      const tTrain = tf.linspace(0, 1, T).reshape([T, 1]); // (T,1)
-      const y = tf.tensor2d(points);                        // (T,2)
+      const totalEpochs = Math.max(10, T * 10);               // 10 epochs per point
+      const previewEvery = Math.max(1, Math.floor(totalEpochs / 25)); // ~25 previews
+
+      const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);    // (T,1)
+      const y = tf.tensor2d(points);                          // (T,2)
 
       model = buildModel();
-      setStatus("Training AI (on-device neural net)...");
+      setStatus(`Training AI · ${totalEpochs} epochs for ${T} points`);
       resetProgress();
       aiPoints = null;
       redraw(false);
 
       await model.fit(tTrain, y, {
-        epochs: TOTAL_EPOCHS,
+        epochs: totalEpochs,
         batchSize: 32,
         shuffle: true,
         callbacks: {
           onEpochEnd: (epoch, logs) => {
-            updateProgress(epoch, logs.loss);
+            updateProgress(epoch, logs.loss, totalEpochs);
 
-            if ((epoch + 1) % PREVIEW_EVERY === 0 || epoch + 1 === TOTAL_EPOCHS) {
+            if ((epoch + 1) % previewEvery === 0 || epoch + 1 === totalEpochs) {
               tf.tidy(() => {
                 const tPred = tf.linspace(0, 1, T).reshape([T, 1]);
                 const pred = model.predict(tPred);
@@ -489,26 +484,6 @@
       tTrain.dispose();
       y.dispose();
       setStatus("Training done. AI stroke is shown on the bottom.");
-    }
-
-    async function generateAI(points) {
-      if (!model) {
-        setStatus("No model yet. Train AI first.");
-        return;
-      }
-      const T = points.length;
-      const t = tf.linspace(0, 1, T).reshape([T, 1]);
-      const pred = model.predict(t);
-      const arr = await pred.array();
-      t.dispose();
-      pred.dispose();
-
-      aiPoints = arr.map(([x, y]) => [
-        Math.min(Math.max(x, 0), 1),
-        Math.min(Math.max(y, 0), 1),
-      ]);
-      redraw(true);
-      setStatus("Original on top · AI copy on bottom.");
     }
 
     // ── Rawdata saver ──────────────────────────────────
@@ -544,14 +519,6 @@
         return;
       }
       await trainModelOnStroke(originalPoints);
-    };
-
-    document.getElementById("btn-draw-ai").onclick = async () => {
-      if (originalPoints.length < 5) {
-        setStatus("No stroke yet.");
-        return;
-      }
-      await generateAI(originalPoints);
     };
 
     document.getElementById("btn-clear").onclick = () => {
