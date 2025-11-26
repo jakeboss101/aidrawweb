@@ -269,6 +269,7 @@
     let originalPoints = [];   // [[x,y] in 0–1]
     let aiPoints = null;
     let model = null;
+    let drawTimeoutId = null;  // 200ms stroke timer
 
     function setStatus(msg) { statusEl.textContent = msg; }
 
@@ -359,6 +360,15 @@
       };
     }
 
+    function stopDrawing(msg) {
+      drawing = false;
+      if (drawTimeoutId) {
+        clearTimeout(drawTimeoutId);
+        drawTimeoutId = null;
+      }
+      if (msg) setStatus(msg);
+    }
+
     // ── Mouse drawing (top half only) ─────────────────
     canvas.addEventListener("mousedown", (e) => {
       e.preventDefault();
@@ -372,6 +382,14 @@
       originalPoints.push([nx, ny]);
       redraw(false);
       setStatus("Recording stroke...");
+
+      // 200ms max stroke duration
+      if (drawTimeoutId) clearTimeout(drawTimeoutId);
+      drawTimeoutId = setTimeout(() => {
+        if (drawing) {
+          stopDrawing(`Recorded ${originalPoints.length} points (time limit).`);
+        }
+      }, 200);
     });
 
     canvas.addEventListener("mousemove", (e) => {
@@ -387,11 +405,13 @@
     canvas.addEventListener("mouseup", (e) => {
       e.preventDefault();
       if (!drawing) return;
-      drawing = false;
-      setStatus(`Recorded ${originalPoints.length} points.`);
+      stopDrawing(`Recorded ${originalPoints.length} points.`);
     });
 
-    canvas.addEventListener("mouseleave", () => { drawing = false; });
+    canvas.addEventListener("mouseleave", () => {
+      if (!drawing) return;
+      stopDrawing(`Recorded ${originalPoints.length} points.`);
+    });
 
     // ── Touch drawing (top half only) ─────────────────
     canvas.addEventListener("touchstart", (e) => {
@@ -406,6 +426,14 @@
       originalPoints.push([nx, ny]);
       redraw(false);
       setStatus("Recording stroke...");
+
+      // 200ms max stroke duration
+      if (drawTimeoutId) clearTimeout(drawTimeoutId);
+      drawTimeoutId = setTimeout(() => {
+        if (drawing) {
+          stopDrawing(`Recorded ${originalPoints.length} points (time limit).`);
+        }
+      }, 200);
     }, { passive: false });
 
     canvas.addEventListener("touchmove", (e) => {
@@ -421,15 +449,14 @@
     canvas.addEventListener("touchend", (e) => {
       e.preventDefault();
       if (!drawing) return;
-      drawing = false;
-      setStatus(`Recorded ${originalPoints.length} points.`);
+      stopDrawing(`Recorded ${originalPoints.length} points.`);
     }, { passive: false });
 
     // ── TF.js model: t -> (x,y) ────────────────────────
     function buildModel() {
       const m = tf.sequential();
-      m.add(tf.layers.dense({ units: 32, inputShape: [1], activation: "tanh" }));
-      m.add(tf.layers.dense({ units: 32, activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 64, inputShape: [1], activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 64, activation: "tanh" }));
       m.add(tf.layers.dense({ units: 2 }));
       m.compile({
         optimizer: tf.train.adam(0.01),
@@ -438,7 +465,7 @@
       return m;
     }
 
-    // Try to use WebGL backend if possible (can help on some devices)
+    // Try to use WebGL backend if possible
     (async () => {
       try {
         await tf.setBackend('webgl');
@@ -451,7 +478,7 @@
     async function trainModelOnStroke(points) {
       const T = points.length;
       const totalEpochs = Math.max(10, T * 10);               // 10 epochs per point
-      const previewEvery = 5;                                 // 🔹 update every 5 epochs
+      const previewEvery = 5;                                 // update drawing every 5 epochs
 
       const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);    // (T,1)
       const y = tf.tensor2d(points);                          // (T,2)
@@ -479,7 +506,7 @@
                 for (let i = 0; i < T; i++) {
                   let x = data[2 * i];
                   let yv = data[2 * i + 1];
-                  x = Math.min(Math.max(x, 0), 1);
+                  x  = Math.min(Math.max(x, 0), 1);
                   yv = Math.min(Math.max(yv, 0), 1);
                   pts.push([x, yv]);
                 }
@@ -536,6 +563,10 @@
       aiPoints = null;
       clearCanvas();
       resetProgress();
+      if (drawTimeoutId) {
+        clearTimeout(drawTimeoutId);
+        drawTimeoutId = null;
+      }
       setStatus("Cleared.");
     };
 
