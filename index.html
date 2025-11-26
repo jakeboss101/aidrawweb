@@ -142,6 +142,13 @@
       transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.1s;
     }
 
+    button span.btn-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #4ade80;
+    }
+
     button.secondary {
       background: #020617;
     }
@@ -203,24 +210,28 @@
       }
     }
   </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 </head>
 <body>
   <div class="app">
     <header>
       <h1><span class="logo-dot"></span>aidraw <span style="font-size:11px; opacity:0.7;">web</span></h1>
-      <p>Draw on top, watch the bottom copy you exactly.</p>
+      <p>Draw on top, watch the tiny neural net learn to copy you on the bottom.</p>
     </header>
 
     <div id="canvas-wrapper">
       <canvas id="canvas" width="360" height="510"></canvas>
       <div id="labels">
         <div class="orig"><span class="dot"></span>Original</div>
-        <div class="ai"><span class="dot"></span>Copy</div>
+        <div class="ai"><span class="dot"></span>AI prediction</div>
       </div>
     </div>
 
     <div id="controls">
+      <!-- AI Draw button removed -->
       <button id="btn-clear" class="secondary">Clear</button>
+      <button id="btn-download-model" class="secondary">Download Model</button>
       <button id="btn-save-rawdata" class="secondary">Save Rawdata</button>
       <div id="status"></div>
     </div>
@@ -232,7 +243,7 @@
       </div>
     </div>
 
-    <footer>Best viewed in portrait · copy resets when you reload</footer>
+    <footer>Best viewed in portrait · model resets when you reload</footer>
   </div>
 
   <script>
@@ -247,13 +258,25 @@
     let drawing = false;
     let originalPoints = [];
     let aiPoints = null;
+    let model = null;
     let drawTimeoutId = null;  // 400ms stroke timer
+    let isTraining = false;
+
+    const MIN_POINTS = 20;     // need a longer stroke now
 
     function setStatus(msg) { statusEl.textContent = msg; }
 
     function resetProgress() {
       epochLabel.textContent = "";
       progressBar.style.width = "0%";
+    }
+
+    function updateProgress(epoch, loss, totalEpochs) {
+      const pct = ((epoch + 1) / totalEpochs) * 100;
+      progressBar.style.width = pct + "%";
+      epochLabel.textContent =
+        `Training epoch ${epoch + 1}/${totalEpochs}` +
+        (loss != null ? ` · loss: ${loss.toFixed(4)}` : "");
     }
 
     function clearCanvas() {
@@ -338,20 +361,18 @@
         drawTimeoutId = null;
       }
 
-      if (originalPoints.length < 2) {
-        setStatus("Draw something on the top half first.");
-        redraw(false);
+      if (originalPoints.length < MIN_POINTS) {
+        setStatus("Stroke too short. Draw a slightly slower, longer stroke on the top half.");
         return;
       }
 
-      // Perfect copy: reuse the same normalized points for the bottom
-      aiPoints = originalPoints.slice();
-      redraw(true);
-      setStatus((msg ? msg + " " : "") + "Copied stroke to bottom.");
+      setStatus((msg ? msg + " " : "") + "Training AI...");
+      trainModelOnStroke(originalPoints);
     }
 
     // Mouse drawing
     canvas.addEventListener("mousedown", (e) => {
+      if (isTraining) return;
       e.preventDefault();
       const { x, y } = getCanvasPosFromMouse(e);
       if (y >= origHeight) return;
@@ -395,6 +416,7 @@
 
     // Touch drawing
     canvas.addEventListener("touchstart", (e) => {
+      if (isTraining) return;
       e.preventDefault();
       const { x, y } = getCanvasPosFromTouch(e);
       if (y >= origHeight) return;
@@ -431,10 +453,93 @@
       stopDrawing(`Recorded ${originalPoints.length} points.`);
     }, { passive: false });
 
+    // Model (bigger & gentler)
+    function buildModel() {
+      const m = tf.sequential();
+      m.add(tf.layers.dense({ units: 128, inputShape: [1], activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 128, activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 64, activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 2 })); // x, y
+      m.compile({
+        optimizer: tf.train.adam(0.003),    // was 0.01
+        loss: "meanSquaredError",
+      });
+      return m;
+    }
+
+    (async () => {
+      try {
+        await tf.setBackend('webgl');
+      } catch (e) {
+        console.warn("Could not set WebGL backend:", e);
+      }
+      await tf.ready();
+    })();
+
+    async function trainModelOnStroke(points) {
+      if (isTraining) {
+        setStatus("Already training. Please wait.");
+        return;
+      }
+
+      const T = points.length;
+      const totalEpochs = 1000;               // was 600
+      const previewEvery = 5;
+
+      const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);
+      const y = tf.tensor2d(points);
+
+      model = buildModel();
+      resetProgress();
+      aiPoints = null;
+      redraw(false);
+
+      isTraining = true;
+      try {
+        await model.fit(tTrain, y, {
+          epochs: totalEpochs,
+          batchSize: 32,
+          shuffle: true,
+          callbacks: {
+            onEpochEnd: (epoch, logs) => {
+              updateProgress(epoch, logs.loss, totalEpochs);
+
+              if ((epoch + 1) % previewEvery === 0 || epoch + 1 === totalEpochs) {
+                tf.tidy(() => {
+                  const tPred = tf.linspace(0, 1, T).reshape([T, 1]);
+                  const pred = model.predict(tPred);
+                  const data = pred.dataSync();
+                  const pts = [];
+                  for (let i = 0; i < T; i++) {
+                    let x = data[2 * i];
+                    let yv = data[2 * i + 1];
+                    x  = Math.min(Math.max(x, 0), 1);
+                    yv = Math.min(Math.max(yv, 0), 1);
+                    pts.push([x, yv]);
+                  }
+                  aiPoints = pts;
+                });
+                redraw(true);
+              }
+            }
+          }
+        });
+
+        setStatus("Training done. AI stroke is shown on the bottom.");
+      } catch (e) {
+        console.error(e);
+        setStatus("Training failed.");
+      } finally {
+        tTrain.dispose();
+        y.dispose();
+        isTraining = false;
+      }
+    }
+
     // Rawdata saver
     function saveRawdata() {
-      if (originalPoints.length < 2) {
-        setStatus("No stroke data to save.");
+      if (originalPoints.length < MIN_POINTS) {
+        setStatus("No good stroke data to save. Draw a longer stroke first.");
         return;
       }
       const lines = [];
@@ -459,6 +564,10 @@
 
     // Buttons
     document.getElementById("btn-clear").onclick = () => {
+      if (isTraining) {
+        setStatus("Cannot clear while training.");
+        return;
+      }
       originalPoints = [];
       aiPoints = null;
       clearCanvas();
@@ -468,6 +577,20 @@
         drawTimeoutId = null;
       }
       setStatus("Cleared.");
+    };
+
+    document.getElementById("btn-download-model").onclick = async () => {
+      if (!model) {
+        setStatus("No model yet. Draw a stroke and let the AI train first.");
+        return;
+      }
+      try {
+        await model.save("downloads://aidraw_model");
+        setStatus("Model downloaded (aidraw_model.*).");
+      } catch (e) {
+        console.error(e);
+        setStatus("Failed to download model.");
+      }
     };
 
     document.getElementById("btn-save-rawdata").onclick = () => {
