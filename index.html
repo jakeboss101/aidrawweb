@@ -31,7 +31,7 @@
 
     .app {
       width: 100%;
-      max-width: 480px;
+      max-width: 432px; /* 90% of 480 */
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -210,7 +210,7 @@
 
     @media (min-width: 768px) {
       .app {
-        max-width: 600px;
+        max-width: 540px; /* 90% of 600 */
         padding-top: 18px;
       }
     }
@@ -234,9 +234,7 @@
     </div>
 
     <div id="controls">
-      <button id="btn-train" class="primary">
-        <span class="btn-dot"></span> AI Draw
-      </button>
+      <!-- AI Draw button removed -->
       <button id="btn-clear" class="secondary">Clear</button>
       <button id="btn-download-model" class="secondary">Download Model</button>
       <button id="btn-save-rawdata" class="secondary">Save Rawdata</button>
@@ -491,7 +489,7 @@
       }
 
       const T = points.length;
-      const totalEpochs = 1000;                    // fixed to 600
+      const totalEpochs = 1000;
       const previewEvery = 5;
 
       const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);
@@ -571,15 +569,6 @@
     }
 
     // Buttons
-    document.getElementById("btn-train").onclick = async () => {
-      if (originalPoints.length < 5) {
-        setStatus("Draw something on the top half first.");
-        return;
-      }
-      setStatus("Training AI...");
-      await trainModelOnStroke(originalPoints);
-    };
-
     document.getElementById("btn-clear").onclick = () => {
       if (isTraining) {
         setStatus("Cannot clear while training.");
@@ -598,7 +587,7 @@
 
     document.getElementById("btn-download-model").onclick = async () => {
       if (!model) {
-        setStatus("No model yet. Use AI Draw first.");
+        setStatus("No model yet. Draw first so the AI can train.");
         return;
       }
       try {
