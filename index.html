@@ -11,15 +11,36 @@
       background: #fff;
       touch-action: none; /* prevent page scroll / zoom on touch */
     }
-    #controls { padding: 8px; display: flex; gap: 8px; align-items: center; }
+    #controls { padding: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     button { padding: 6px 10px; cursor: pointer; }
-    #status { margin-left: 12px; font-size: 14px; }
+    #status { margin-left: 12px; font-size: 14px; min-width: 200px; }
+    #progress-wrapper {
+      width: 100%;
+      padding: 0 8px 8px 8px;
+      box-sizing: border-box;
+    }
+    #epoch-label { font-size: 13px; margin-bottom: 4px; display: block; }
+    #progress-container {
+      width: 100%;
+      max-width: 400px;
+      height: 10px;
+      background: #e0e0e0;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #4caf50; /* green car */
+      transition: width 0.1s linear;
+    }
   </style>
   <!-- Real neural net in the browser -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 </head>
 <body>
   <canvas id="canvas" width="800" height="400"></canvas>
+
   <div id="controls">
     <button id="btn-train">Train AI</button>
     <button id="btn-draw-ai">Draw with AI</button>
@@ -28,11 +49,23 @@
     <span id="status"></span>
   </div>
 
+  <div id="progress-wrapper">
+    <span id="epoch-label"></span>
+    <div id="progress-container">
+      <div id="progress-bar"></div>
+    </div>
+  </div>
+
   <script>
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
     const statusEl = document.getElementById("status");
     const leftWidth = canvas.width / 2;
+
+    const epochLabel = document.getElementById("epoch-label");
+    const progressBar = document.getElementById("progress-bar");
+
+    const TOTAL_EPOCHS = 200;
 
     let drawing = false;
     let originalPoints = [];   // [[x,y] in 0–1]
@@ -40,6 +73,18 @@
     let model = null;
 
     function setStatus(msg) { statusEl.textContent = msg; }
+
+    function resetProgress() {
+      epochLabel.textContent = "";
+      progressBar.style.width = "0%";
+    }
+
+    function updateProgress(epoch, loss) {
+      const pct = ((epoch + 1) / TOTAL_EPOCHS) * 100;
+      progressBar.style.width = pct + "%";
+      epochLabel.textContent = `Training epoch ${epoch + 1}/${TOTAL_EPOCHS}` +
+        (loss != null ? `   loss: ${loss.toFixed(4)}` : "");
+    }
 
     function clearCanvas() {
       ctx.fillStyle = "#ffffff";
@@ -114,6 +159,7 @@
       drawing = true;
       originalPoints = [];
       aiPoints = null;
+      resetProgress();
       const [nx, ny] = screenToNorm(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
@@ -147,6 +193,7 @@
       drawing = true;
       originalPoints = [];
       aiPoints = null;
+      resetProgress();
       const [nx, ny] = screenToNorm(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
@@ -190,15 +237,17 @@
 
       model = buildModel();
       setStatus("Training AI (browser neural net)...");
+      resetProgress();
 
       await model.fit(t, y, {
-        epochs: 200,
+        epochs: TOTAL_EPOCHS,
         batchSize: 32,
         shuffle: true,
         callbacks: {
           onEpochEnd: (epoch, logs) => {
-            if (epoch % 20 === 0) {
-              setStatus(`Training... epoch ${epoch}, loss ${logs.loss.toFixed(4)}`);
+            updateProgress(epoch, logs.loss);
+            if ((epoch + 1) % 20 === 0 || epoch + 1 === TOTAL_EPOCHS) {
+              setStatus(`Training... epoch ${epoch + 1}/${TOTAL_EPOCHS}`);
             }
           }
         }
@@ -250,6 +299,7 @@
       originalPoints = [];
       aiPoints = null;
       clearCanvas();
+      resetProgress();
       setStatus("Cleared.");
     };
 
