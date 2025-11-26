@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>aidraw – browser AI</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #fafafa; }
+    #canvas { display: block; border-bottom: 1px solid #ccc; background: #fff; }
+    #controls { padding: 8px; display: flex; gap: 8px; align-items: center; }
+    button { padding: 6px 10px; cursor: pointer; }
+    #status { margin-left: 12px; font-size: 14px; }
+  </style>
+  <!-- Real neural net in the browser -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+</head>
+<body>
+  <canvas id="canvas" width="800" height="400"></canvas>
+  <div id="controls">
+    <button id="btn-train">Train AI</button>
+    <button id="btn-draw-ai">Draw with AI</button>
+    <button id="btn-clear">Clear</button>
+    <button id="btn-save">Save Image</button>
+    <span id="status"></span>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+    const leftWidth = canvas.width / 2;
+
+    let drawing = false;
+    let originalPoints = [];   // [[x,y] in 0–1]
+    let aiPoints = null;
+    let model = null;
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    function clearCanvas() {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#e0e0e0";
+      ctx.strokeRect(0, 0, leftWidth, canvas.height);
+      ctx.strokeRect(leftWidth, 0, leftWidth, canvas.height);
+    }
+
+    function screenToNorm(x, y) {
+      const nx = Math.max(0, Math.min(x, leftWidth - 1)) / leftWidth;
+      const ny = 1 - (Math.max(0, Math.min(y, canvas.height - 1)) / canvas.height);
+      return [nx, ny];
+    }
+
+    function normToScreenLeft(x, y) {
+      return [x * leftWidth, (1 - y) * canvas.height];
+    }
+
+    function normToScreenRight(x, y) {
+      return [leftWidth + x * leftWidth, (1 - y) * canvas.height];
+    }
+
+    function drawStroke(points, toScreenFn, color) {
+      if (!points || points.length < 2) return;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let [x0, y0] = toScreenFn(points[0][0], points[0][1]);
+      ctx.moveTo(x0, y0);
+      for (let i = 1; i < points.length; i++) {
+        let [x, y] = toScreenFn(points[i][0], points[i][1]);
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    function redraw(showAI = false) {
+      clearCanvas();
+      if (originalPoints.length > 1) {
+        drawStroke(originalPoints, normToScreenLeft, "#000000");
+      }
+      if (showAI && aiPoints && aiPoints.length > 1) {
+        drawStroke(aiPoints, normToScreenRight, "#0000ff");
+      }
+    }
+
+    clearCanvas();
+
+    // Mouse drawing (left half only)
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.offsetY >= canvas.height || e.offsetX >= leftWidth) return;
+      drawing = true;
+      originalPoints = [];
+      aiPoints = null;
+      const [nx, ny] = screenToNorm(e.offsetX, e.offsetY);
+      originalPoints.push([nx, ny]);
+      redraw(false);
+      setStatus("Recording stroke...");
+    });
+
+    canvas.addEventListener("mousemove", (e) => {
+      if (!drawing) return;
+      if (e.offsetY >= canvas.height || e.offsetX >= leftWidth) return;
+      const [nx, ny] = screenToNorm(e.offsetX, e.offsetY);
+      originalPoints.push([nx, ny]);
+      redraw(false);
+    });
+
+    canvas.addEventListener("mouseup", () => {
+      if (!drawing) return;
+      drawing = false;
+      setStatus(`Recorded ${originalPoints.length} points.`);
+    });
+    canvas.addEventListener("mouseleave", () => { drawing = false; });
+
+    // Build TF.js model: t -> (x,y)
+    function buildModel() {
+      const m = tf.sequential();
+      m.add(tf.layers.dense({ units: 64, inputShape: [1], activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 64, activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 2 }));
+      m.compile({
+        optimizer: tf.train.adam(0.01),
+        loss: "meanSquaredError",
+      });
+      return m;
+    }
+
+    async function trainModelOnStroke(points) {
+      const T = points.length;
+      const t = tf.linspace(0, 1, T).reshape([T, 1]);      // (T,1)
+      const y = tf.tensor2d(points);                        // (T,2)
+
+      model = buildModel();
+      setStatus("Training AI (browser neural net)...");
+
+      await model.fit(t, y, {
+        epochs: 200,
+        batchSize: 32,
+        shuffle: true,
+        callbacks: {
+          onEpochEnd: (epoch, logs) => {
+            if (epoch % 20 === 0) {
+              setStatus(`Training... epoch ${epoch}, loss ${logs.loss.toFixed(4)}`);
+            }
+          }
+        }
+      });
+
+      t.dispose();
+      y.dispose();
+      setStatus("Training done. Click 'Draw with AI'.");
+    }
+
+    async function generateAI(points) {
+      if (!model) {
+        setStatus("No model yet. Train AI first.");
+        return;
+      }
+      const T = points.length;
+      const t = tf.linspace(0, 1, T).reshape([T, 1]);
+      const pred = model.predict(t);
+      const arr = await pred.array();
+      t.dispose();
+      pred.dispose();
+
+      aiPoints = arr.map(([x, y]) => [
+        Math.min(Math.max(x, 0), 1),
+        Math.min(Math.max(y, 0), 1),
+      ]);
+      redraw(true);
+      setStatus("Original (left) vs AI (right, blue).");
+    }
+
+    // Buttons
+    document.getElementById("btn-train").onclick = async () => {
+      if (originalPoints.length < 5) {
+        setStatus("Draw something on the left first.");
+        return;
+      }
+      await trainModelOnStroke(originalPoints);
+    };
+
+    document.getElementById("btn-draw-ai").onclick = async () => {
+      if (originalPoints.length < 5) {
+        setStatus("No stroke yet.");
+        return;
+      }
+      await generateAI(originalPoints);
+    };
+
+    document.getElementById("btn-clear").onclick = () => {
+      originalPoints = [];
+      aiPoints = null;
+      clearCanvas();
+      setStatus("Cleared.");
+    };
+
+    document.getElementById("btn-save").onclick = () => {
+      const link = document.createElement("a");
+      link.download = "aidraw_web.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      setStatus("Image downloaded.");
+    };
+  </script>
+</body>
+</html>
