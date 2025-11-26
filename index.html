@@ -5,7 +5,12 @@
   <title>aidraw – browser AI</title>
   <style>
     body { margin: 0; font-family: system-ui, sans-serif; background: #fafafa; }
-    #canvas { display: block; border-bottom: 1px solid #ccc; background: #fff; }
+    #canvas {
+      display: block;
+      border-bottom: 1px solid #ccc;
+      background: #fff;
+      touch-action: none; /* prevent page scroll / zoom on touch */
+    }
     #controls { padding: 8px; display: flex; gap: 8px; align-items: center; }
     button { padding: 6px 10px; cursor: pointer; }
     #status { margin-left: 12px; font-size: 14px; }
@@ -84,13 +89,32 @@
 
     clearCanvas();
 
-    // Mouse drawing (left half only)
+    function getCanvasPosFromMouse(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+    }
+
+    function getCanvasPosFromTouch(e) {
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches[0] || e.changedTouches[0];
+      return {
+        x: t.clientX - rect.left,
+        y: t.clientY - rect.top,
+      };
+    }
+
+    // ── Mouse drawing (left half only) ─────────────────
     canvas.addEventListener("mousedown", (e) => {
-      if (e.offsetY >= canvas.height || e.offsetX >= leftWidth) return;
+      e.preventDefault();
+      const { x, y } = getCanvasPosFromMouse(e);
+      if (y >= canvas.height || x >= leftWidth) return;
       drawing = true;
       originalPoints = [];
       aiPoints = null;
-      const [nx, ny] = screenToNorm(e.offsetX, e.offsetY);
+      const [nx, ny] = screenToNorm(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
       setStatus("Recording stroke...");
@@ -98,20 +122,55 @@
 
     canvas.addEventListener("mousemove", (e) => {
       if (!drawing) return;
-      if (e.offsetY >= canvas.height || e.offsetX >= leftWidth) return;
-      const [nx, ny] = screenToNorm(e.offsetX, e.offsetY);
+      e.preventDefault();
+      const { x, y } = getCanvasPosFromMouse(e);
+      if (y >= canvas.height || x >= leftWidth) return;
+      const [nx, ny] = screenToNorm(x, y);
       originalPoints.push([nx, ny]);
       redraw(false);
     });
 
-    canvas.addEventListener("mouseup", () => {
+    canvas.addEventListener("mouseup", (e) => {
+      e.preventDefault();
       if (!drawing) return;
       drawing = false;
       setStatus(`Recorded ${originalPoints.length} points.`);
     });
+
     canvas.addEventListener("mouseleave", () => { drawing = false; });
 
-    // Build TF.js model: t -> (x,y)
+    // ── Touch drawing (left half only, prevent scroll) ─
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      const { x, y } = getCanvasPosFromTouch(e);
+      if (y >= canvas.height || x >= leftWidth) return;
+      drawing = true;
+      originalPoints = [];
+      aiPoints = null;
+      const [nx, ny] = screenToNorm(x, y);
+      originalPoints.push([nx, ny]);
+      redraw(false);
+      setStatus("Recording stroke...");
+    }, { passive: false });
+
+    canvas.addEventListener("touchmove", (e) => {
+      if (!drawing) return;
+      e.preventDefault();
+      const { x, y } = getCanvasPosFromTouch(e);
+      if (y >= canvas.height || x >= leftWidth) return;
+      const [nx, ny] = screenToNorm(x, y);
+      originalPoints.push([nx, ny]);
+      redraw(false);
+    }, { passive: false });
+
+    canvas.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      if (!drawing) return;
+      drawing = false;
+      setStatus(`Recorded ${originalPoints.length} points.`);
+    }, { passive: false });
+
+    // ── TF.js model: t -> (x,y) ────────────────────────
     function buildModel() {
       const m = tf.sequential();
       m.add(tf.layers.dense({ units: 64, inputShape: [1], activation: "tanh" }));
@@ -170,7 +229,7 @@
       setStatus("Original (left) vs AI (right, blue).");
     }
 
-    // Buttons
+    // ── Buttons ────────────────────────────────────────
     document.getElementById("btn-train").onclick = async () => {
       if (originalPoints.length < 5) {
         setStatus("Draw something on the left first.");
