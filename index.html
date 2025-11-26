@@ -83,8 +83,8 @@
       display: block;
       width: 100%;
       height: auto;
-      max-height: 65vh;          /* shrink on small phones */
-      touch-action: none;        /* stop scroll while drawing */
+      max-height: 65vh;
+      touch-action: none;
       background: radial-gradient(circle at top, #020617 0, #000 55%);
     }
 
@@ -216,7 +216,6 @@
     }
   </style>
 
-  <!-- Real neural net in the browser -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
 </head>
 <body>
@@ -227,8 +226,7 @@
     </header>
 
     <div id="canvas-wrapper">
-      <!-- portrait-friendly: ORIGINAL on top, AI on bottom -->
-      <canvas id="canvas" width="360" height="510"></canvas> <!-- 15% shorter -->
+      <canvas id="canvas" width="360" height="510"></canvas>
       <div id="labels">
         <div class="orig"><span class="dot"></span>Original</div>
         <div class="ai"><span class="dot"></span>AI prediction</div>
@@ -263,13 +261,13 @@
     const epochLabel = document.getElementById("epoch-label");
     const progressBar = document.getElementById("progress-bar");
 
-    const origHeight = canvas.height / 2; // top half = original, bottom half = AI
+    const origHeight = canvas.height / 2;
 
     let drawing = false;
-    let originalPoints = [];   // [[x,y] in 0–1]
+    let originalPoints = [];
     let aiPoints = null;
     let model = null;
-    let drawTimeoutId = null;  // 200ms stroke timer
+    let drawTimeoutId = null;  // 400ms stroke timer
 
     function setStatus(msg) { statusEl.textContent = msg; }
 
@@ -369,7 +367,7 @@
       if (msg) setStatus(msg);
     }
 
-    // ── Mouse drawing (top half only) ─────────────────
+    // Mouse drawing
     canvas.addEventListener("mousedown", (e) => {
       e.preventDefault();
       const { x, y } = getCanvasPosFromMouse(e);
@@ -383,13 +381,12 @@
       redraw(false);
       setStatus("Recording stroke...");
 
-      // 200ms max stroke duration
       if (drawTimeoutId) clearTimeout(drawTimeoutId);
       drawTimeoutId = setTimeout(() => {
         if (drawing) {
           stopDrawing(`Recorded ${originalPoints.length} points (time limit).`);
         }
-      }, 200);
+      }, 400);
     });
 
     canvas.addEventListener("mousemove", (e) => {
@@ -413,7 +410,7 @@
       stopDrawing(`Recorded ${originalPoints.length} points.`);
     });
 
-    // ── Touch drawing (top half only) ─────────────────
+    // Touch drawing
     canvas.addEventListener("touchstart", (e) => {
       e.preventDefault();
       const { x, y } = getCanvasPosFromTouch(e);
@@ -427,13 +424,12 @@
       redraw(false);
       setStatus("Recording stroke...");
 
-      // 200ms max stroke duration
       if (drawTimeoutId) clearTimeout(drawTimeoutId);
       drawTimeoutId = setTimeout(() => {
         if (drawing) {
           stopDrawing(`Recorded ${originalPoints.length} points (time limit).`);
         }
-      }, 200);
+      }, 400);
     }, { passive: false });
 
     canvas.addEventListener("touchmove", (e) => {
@@ -452,7 +448,7 @@
       stopDrawing(`Recorded ${originalPoints.length} points.`);
     }, { passive: false });
 
-    // ── TF.js model: t -> (x,y) ────────────────────────
+    // Model
     function buildModel() {
       const m = tf.sequential();
       m.add(tf.layers.dense({ units: 64, inputShape: [1], activation: "tanh" }));
@@ -465,7 +461,6 @@
       return m;
     }
 
-    // Try to use WebGL backend if possible
     (async () => {
       try {
         await tf.setBackend('webgl');
@@ -477,14 +472,13 @@
 
     async function trainModelOnStroke(points) {
       const T = points.length;
-      const totalEpochs = Math.max(10, T * 10);               // 10 epochs per point
-      const previewEvery = 5;                                 // update drawing every 5 epochs
+      const totalEpochs = 600;                    // fixed to 600
+      const previewEvery = 5;
 
-      const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);    // (T,1)
-      const y = tf.tensor2d(points);                          // (T,2)
+      const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);
+      const y = tf.tensor2d(points);
 
       model = buildModel();
-      // no "Training AI · ..." status line
       resetProgress();
       aiPoints = null;
       redraw(false);
@@ -523,7 +517,7 @@
       setStatus("Training done. AI stroke is shown on the bottom.");
     }
 
-    // ── Rawdata saver ──────────────────────────────────
+    // Rawdata saver
     function saveRawdata() {
       if (originalPoints.length < 5) {
         setStatus("No stroke data to save.");
@@ -549,7 +543,7 @@
       setStatus("Saved rawdata.py");
     }
 
-    // ── Buttons ────────────────────────────────────────
+    // Buttons
     document.getElementById("btn-train").onclick = async () => {
       if (originalPoints.length < 5) {
         setStatus("Draw something on the top half first.");
