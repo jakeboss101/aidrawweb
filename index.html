@@ -149,6 +149,11 @@
       background: #4ade80;
     }
 
+    button.primary {
+      background: linear-gradient(135deg, #4f46e5, #22d3ee);
+      border-color: transparent;
+    }
+
     button.secondary {
       background: #020617;
     }
@@ -229,7 +234,9 @@
     </div>
 
     <div id="controls">
-      <!-- AI Draw button removed -->
+      <button id="btn-train" class="primary">
+        <span class="btn-dot"></span> AI Draw
+      </button>
       <button id="btn-clear" class="secondary">Clear</button>
       <button id="btn-download-model" class="secondary">Download Model</button>
       <button id="btn-save-rawdata" class="secondary">Save Rawdata</button>
@@ -262,8 +269,6 @@
     let drawTimeoutId = null;  // 400ms stroke timer
     let isTraining = false;
 
-    const MIN_POINTS = 20;     // need a longer stroke now
-
     function setStatus(msg) { statusEl.textContent = msg; }
 
     function resetProgress() {
@@ -280,9 +285,11 @@
     }
 
     function clearCanvas() {
+      // Whole canvas dark again
       ctx.fillStyle = "#020617";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // Divider line
       ctx.strokeStyle = "#111827";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -328,6 +335,7 @@
     function redraw(showAI = false) {
       clearCanvas();
       if (originalPoints.length > 1) {
+        // back to light stroke on dark bg
         drawStroke(originalPoints, normToScreenOriginal, "#e5e7eb");
       }
       if (showAI && aiPoints && aiPoints.length > 1) {
@@ -361,12 +369,13 @@
         drawTimeoutId = null;
       }
 
-      if (originalPoints.length < MIN_POINTS) {
-        setStatus("Stroke too short. Draw a slightly slower, longer stroke on the top half.");
+      if (originalPoints.length < 5) {
+        setStatus("Stroke too short. Draw a longer stroke on the top half.");
         return;
       }
 
       setStatus((msg ? msg + " " : "") + "Training AI...");
+      // Auto-start training after stroke is done
       trainModelOnStroke(originalPoints);
     }
 
@@ -453,15 +462,14 @@
       stopDrawing(`Recorded ${originalPoints.length} points.`);
     }, { passive: false });
 
-    // Model (bigger & gentler)
+    // Model
     function buildModel() {
       const m = tf.sequential();
-      m.add(tf.layers.dense({ units: 128, inputShape: [1], activation: "tanh" }));
-      m.add(tf.layers.dense({ units: 128, activation: "tanh" }));
+      m.add(tf.layers.dense({ units: 64, inputShape: [1], activation: "tanh" }));
       m.add(tf.layers.dense({ units: 64, activation: "tanh" }));
-      m.add(tf.layers.dense({ units: 2 })); // x, y
+      m.add(tf.layers.dense({ units: 2 }));
       m.compile({
-        optimizer: tf.train.adam(0.003),    // was 0.01
+        optimizer: tf.train.adam(0.01),
         loss: "meanSquaredError",
       });
       return m;
@@ -483,7 +491,7 @@
       }
 
       const T = points.length;
-      const totalEpochs = 1500;               // was 600
+      const totalEpochs = 600;                    // fixed to 600
       const previewEvery = 5;
 
       const tTrain = tf.linspace(0, 1, T).reshape([T, 1]);
@@ -538,8 +546,8 @@
 
     // Rawdata saver
     function saveRawdata() {
-      if (originalPoints.length < MIN_POINTS) {
-        setStatus("No good stroke data to save. Draw a longer stroke first.");
+      if (originalPoints.length < 5) {
+        setStatus("No stroke data to save.");
         return;
       }
       const lines = [];
@@ -563,6 +571,15 @@
     }
 
     // Buttons
+    document.getElementById("btn-train").onclick = async () => {
+      if (originalPoints.length < 5) {
+        setStatus("Draw something on the top half first.");
+        return;
+      }
+      setStatus("Training AI...");
+      await trainModelOnStroke(originalPoints);
+    };
+
     document.getElementById("btn-clear").onclick = () => {
       if (isTraining) {
         setStatus("Cannot clear while training.");
@@ -581,7 +598,7 @@
 
     document.getElementById("btn-download-model").onclick = async () => {
       if (!model) {
-        setStatus("No model yet. Draw a stroke and let the AI train first.");
+        setStatus("No model yet. Use AI Draw first.");
         return;
       }
       try {
